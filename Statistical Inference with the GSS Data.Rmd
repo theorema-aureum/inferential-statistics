@@ -1,0 +1,316 @@
+---
+title: "Statistical Inference with the GSS Data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(tidyverse)
+library(moments)
+library(statsr)
+```
+
+### Load data
+
+```{r load-data}
+load("gss.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+####### The General Social Survey (GSS) is a cross-sectional study that captures the attitudes and behaviors toward various facets of American culture. Random samples were gathered through phone or in-person interviews by separating the nation into metropolitan regions referred to as Consolidated Statistical Areas (CSAs) or Core Based Statistical Areas (CBSAs). Respondents were sampled from a post delivery sequence file to create one unit; if listing was required, this would constitute a second unit of block groups. The study utilized Census enumeration methods to develop the sample population from these groups, allowing this population to be representative of entire nation. Since this survey is cross-sectional and observational, no causality can be inferred from this project. 
+
+####### There is a potential of bias in this dataset based on the possibility of underrepresented groups even after weighting, the ability of individuals to recall information specific to the interview, and the possibility of individuals altering their responses due to the knowledge of being interviewed. Any bias present increases the possibility of Type I and Type II errors in the inferences, so it is essential to minimize this as much as possible. 
+
+* * *
+
+## Part 2: Research question
+
+####### In total 4 area will be considered of the following types: one numerical variable and one categorical variable of two levels, one numerical variable and one categorical variable of more than two levels, two categorical variables of two levels each, and two categorical variables of more than two levels each. 
+
+**Area 1:** With the advent of technological advances, a possible area of interest is the effect of age on the likelihood of a respondent to complete an in-person or phone-based interview. Is there a significant difference in the average age of respondents by sex?
+
+**Area 2:** The data set contains various possible responses for political affiliation. From this data, is there any difference average number of Children among the Republican, Democrat, and Independent political parties?
+
+**Area 3:** For various reasons, individuals may be unable to work and require government aid. Is the proportion of males who received aid greater than the proportion of females who received aid?
+
+**Area 4:** In the past of the United States, minority groups have unknowingly been experimented upon, and in the modern time this may be linked to a distrust in medicine. Is there a significant difference in the response of individuals by race in their confidence of those who lead medical institutions?
+
+
+* * *
+
+## Part 3: Inference
+
+
+**Area 1**
+
+###### The null hypothesis is there is no difference in the population (here this is the nation) average age of male and female respondents, and the alternative hypothesis is that there is a difference in the population average age of male and female respondents. The GSS survey data contains the response "Male" and "Female" for the sex variable and the age variable as a whole number. Since there is a different number of male and female respondents, this requires a two-sample t-test with two tails (two tails since looking for a difference, which consists of the choices "greater than" or "less than"). 
+
+###### There are several conditions to check to confirm that a two-sample t-test is the appropriate choice: independence of sample data, data obtained from a random sample, normally distributed sample data in both groups, and that the sample variances for each group are equal. Note that there are 202 respondents who did not provide an age (62 male respondents and 140 female respondents). Compared to the size of each group, this is a very small number and won't significantly influence the results. 
+
+###### From the sampling methods, we know that the sample data was independently and randomly obtained.
+
+```{r}
+str(gss$sex)
+str(gss$age)
+
+gss %>% count(age)
+gss %>% count(sex)
+gss %>% filter(is.na(age)) %>% count(sex)
+
+male_age <- gss$age[gss$sex == "Male" & !is.na(gss$age)]
+female_age <- gss$age[gss$sex == "Female" & !is.na(gss$age)]
+
+ggplot(gss) + 
+  geom_histogram(aes(x = age)) + 
+  facet_wrap(~sex) +
+  labs(
+    title = "Age of Respondents by Sex",
+    x = "Respondent Age",
+    y = "Total"
+  ) +
+  theme_classic()
+```
+
+###### Due to skewed data for age a two-sample t-test may not be an appropriate choice, so start with checking for normality. male_age has a skew of 0.4469, and female_age has a skew of 0.4339. Since skewness is between 0 and 0.5, this data is approximately symmetric. However, using the logarithmic transformation sqrt(x) for positively and moderately skewed data more closely resembles the normal distribution, so this technique is employed. It is visually confirmed through a histogram of both groups that the data is normally distributed. Due to the sampling methods of the survey, the data is independent. 
+
+###### For the final condition, it is clear that the group variances are unequal. In this case, the Welch approximation to the degrees of freedom is used instead of the t-test pooled estimate. This approximation takes the unequal variance into account, which results in a lower degrees of freedom value yet a clearer test result. This is the default setting for the base-R t-test function. The logic here is that if variances are equal, then their ratio is 1, which is where the numerator value of 1 in the t-test pooled estimate calculation comes from. If the variances are unequal, then their ratio is not 1 (shocker), hence the numerator values are the respective sample variances.
+
+```{r}
+skewness(male_age, na.rm = TRUE)
+skewness(female_age, na.rm = TRUE)
+
+ggplot(gss %>% mutate(age = sqrt(age))) + 
+    geom_histogram(aes(x = age)) + 
+    facet_wrap(~sex) +
+    labs(
+        title = "Age of Respondents by Sex",
+        x = "Respondent Age",
+        y = "Total"
+    ) +
+    theme_classic()
+
+male_age <- sqrt(male_age)
+female_age <- sqrt(female_age)
+
+var.test(male_age, female_age)
+```
+
+###### Now to consider the theory of the test. We see that in the groups from the sample, on average male respodents are 44.95 years old, and female respondents are 46.29 years old. The transformed male and female average ages are also provided. The t-test is evaluated using the p-value method. This test assumes a 95% confidence level (the percentage of times one would expect to get close to the same results if the test was ran over and over and over again). As a result, there is a significance level of 100% - 95% = 5% shows how strong the evidence to say there is a significant difference in the average age of respondents by sex needs to be. This should be a small percentage, and 5% is the standard. The test calculates a p-value using specific formulas based on the sample sizes, sample means, and sample standard deviations; if the p-value is smaller than the significance level, then the alternative hypothesis is true. Since the test is only seeking a difference and not greater than or less than, the p-value needs to be smaller than 5%/2 = 0.05/2 = 0.025 to reject the null hypothesis. Using the base-R function t.test and specifying an alternative hypothesis as a two-sided result, it is shown that the p-value is much smaller than 0.025. The test results also contain a confidence interval. The interpretation of this confidence level at 95% significance is that 95 out of 100 randomly collected samples of this group would be expected to contain a difference in average age of each group of between -0.1130 and -0.0704.
+
+###### Based on the test results, the null hypothesis is rejected, showing that there is a significant difference between the average age of respondents based on sex.
+
+```{r}
+gss %>% 
+  group_by(sex) %>% 
+  summarize(`average age` = mean(age, na.rm = TRUE))
+
+mean(male_age)
+mean(female_age)
+
+t.test(male_age, female_age, alternative = "two.sided")
+```
+
+
+
+**Area 2**
+
+###### Note that the variable partyid contains 9 distinct values, two of which are "Other Party" and NA. Edit partyid to represent Republican, Democrat, and Independent.Although redundant, case_when needs the str_detect option for "Other Party" or it will replace it with a default value of NA, changing the data set. case_when also changes the partyid variable from a factor to a character, so case_when needs to be wrapped in as_factor to undo this. Next, grab a count of partyid to ensure that the appropriate changes were made. It appears that 14,553 respondents identified as Republican, 21,157 respondents identified as Democrat, and 20,163 respondents identified as independent. childs represents the number of Children a respondent has; 181 respondents did not answer this. In our sample groups, Independent respondents on average reported having 1.81 Children, Democrats on average reported having 2.09 Children, and Republicans on average reported having 1.96 Children. From the boxplots below, it appears the spread of data and medians for each group are possibly identical.
+
+```{r}
+gss<- gss %>% 
+  mutate(
+    partyid = 
+      as_factor(case_when(
+        str_detect(partyid, "Demo") ~ "Democrat",
+        str_detect(partyid, "Repu") ~ "Republican",
+        str_detect(partyid, "Ind")  ~ "Independent",
+        str_detect(partyid, "Oth")  ~ "Other Party"
+        )
+      )
+    ) 
+
+gss %>% count(partyid)
+
+gss %>% 
+  filter(partyid %in% c("Republican", "Democrat", "Independent")) %>%
+  group_by(partyid) %>%
+  summarize(`average number of Children` = mean(childs, na.rm = TRUE))
+
+gss %>% 
+  filter(partyid %in% c("Republican", "Democrat", "Independent")) %>%
+  ggplot() +
+  geom_boxplot(aes(x = partyid, y = childs)) +
+  labs(
+    title = "Number of Children by Political Affiliation",
+    x = "Political Affiliation",
+    y = "Number of Children"
+  ) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+###### To provide more information about the underlying population distribution, an ANOVA (analysis of variance) test needs to be conducted. There are three conditions for the ANOVA test: the sample data is independently and randomly obtained, the sample data is normally distributed, and the level of variance in each group is roughly equal.
+
+###### From the sampling methods, we know that the sample data was independently and randomly obtained. 
+
+###### The histograms below show that the data is right-skewed. A quick check shows that the skew among groups is close to 1, so the groups are moderately skewed, again necessitating the sqrt(x) logarithmic transformation on childs. Visually the transformed data more closely follows the normal distribution. 
+
+```{r}
+gss %>%
+  filter(partyid %in% c("Republican", "Democrat", "Independent")) %>%
+  ggplot() +
+  geom_histogram(aes(x = childs)) +
+  facet_wrap(~partyid) +
+  labs(
+    title = "Reported Number of Children by Political Affiliation",
+    x = "Reported Number of Children",
+    y = "Total"
+  ) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+rep_Children <- gss$childs[gss$partyid == "Republican"]
+dem_Children <- gss$childs[gss$partyid == "Democrat"]
+ind_Children <- gss$childs[gss$partyid == "Independent"]
+
+skewness(rep_Children, na.rm = TRUE)
+skewness(dem_Children, na.rm = TRUE)
+skewness(ind_Children, na.rm = TRUE)
+
+gss <- gss %>% mutate(childs = sqrt(childs))
+
+gss %>%
+  filter(partyid %in% c("Republican", "Democrat", "Independent")) %>%
+  ggplot() +
+  geom_histogram(aes(x = childs)) +
+  facet_wrap(~partyid) +
+  labs(
+    title = "Reported Number of Children by Political Affiliation",
+    x = "Reported Number of Children",
+    y = "Total"
+  ) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+###### It is evident that the level of variance in each group is roughly the same. This satisfies the last of the three conditions.
+
+```{r}
+gss %>% 
+    filter(partyid %in% c("Republican", "Democrat", "Independent")) %>%
+    group_by(partyid) %>%
+    summarize(`group variance` = var(childs, na.rm = TRUE)) 
+```
+
+###### The ANOVA test works by dividing the variance between groups (variation between group mean and overall mean) and variation within groups (variation in group values and their group mean) to create the F-statistic. The null hypothesis is that all group means are equal, and the alternative hypothesis is that at least one group mean differs from the rest. The aov function does this and provides a p-value, working on the assumption of a 95% confidence level. For ease of use of the aov function, create a subset of the data called gss_party containing data for Republicans, Democrats, and Independents. It is evident that the p-value is significant and the null hypothesis is rejected, but this does not give any information about which group means are different. 
+
+```{r}
+gss_party <- gss %>% filter(partyid %in% c("Republican", "Democrat", "Independent"))
+
+summary(aov(childs ~ partyid, gss_party))
+```
+
+###### To determine this, the Tukey HSD (Honestly Significant Differences) test is needed. This test has the same conditions as the ANOVA test. The Tukey HSD test splits the groups into pairs, takes the absolute value of differences between pairs, and divides it by the standard error of the mean (square root of Mean Square Error) determined by the ANOVA test, closely resembling the theory of a t-test. From the Tukey HSD test, it is evident that all three pairings of political affiliations have a p-value smaller than 0.025 (this value is taken from 0.05/2 since the ANOVA test is a two-tailed test). 
+
+```{r}
+TukeyHSD(aov(childs ~ partyid, gss_party))
+```
+
+
+
+**Area 3**
+
+###### Out of all respondents, 25,146 identified as male and 31.915 identified as female (taken from the variable sex). The variable govaid contains responses to the question "Did you ever - because of sickness, unemployment, or any other reason - receive anything like welfare, unemployment insurance, or other aid from government agencies?" These responses can be "Yes," "No," "DK" (don't know), or NA (no answer was given). There were 4,325 "Yes" responses, 7,760 "No" responses, and 44,976 NA responses to govaid. Due to the amount of "Yes" and "No" answers, this question can still be explored. 
+
+```{r}
+gss %>% count(sex)
+gss %>% count(govaid)
+```
+
+###### Construct a table of responses with columns representing sex and rows representing the "Yes" and "No" responses to govaid. In total, 12,085 respondents answered govaid, comprised of 5,388 male respondents and 6,697 female respondents. 2.090 male respondents answered govaid "Yes," and 3,298 male respondents answered govaid "No"; 2,235 female respondents answered govaid "Yes," and 4,462 female respondents answered govaid "No."
+
+```{r}
+table(gss$sex, gss$govaid)
+```
+
+###### To answer this, a two-proportion z-test is needed to test for differences in sample proportions since the recorded answers are based on "Male" and "Female" and "Yes" and "No" (in other words, no numerical data aside from the counts of each response type). Two main conditions need to be met to use this test: the success-failure (sample size * success >= 10 and sample size * failure  >= 10) condition for each group needs to be met (this is a requirement for the binomial distribution which the z-test utilizes) and independence. 
+
+###### Independence is establised due to the sampling methods of this survey. Each group in this survey is independent of each other since for the purposes of this survey one cannot identify only as male or female, and govaid has only a "Yes" or "No" option present for those who answered. 
+
+###### The success-failure condition is important because it ensures that the sample is large enough to be approximated by the normal distribution. To verify the success-failure condition, define a success as an individual answering govaid as "Yes." Using the above table, it is clear that this condition is met:
+
+```{r}
+table(gss$sex, gss$govaid)
+
+(2090/5388) * 5388 >= 10
+(3298/5388) * 5388 >= 10
+
+(2235/6697) * 6697 >= 10
+(4462/6697) * 6697 >= 10
+```
+
+###### The null hypothesis is that there is no difference in the sample proportion (the proportion of success) for each group, and the alternative hypothesis is that the proportion for males is greater than the proportion for females. As in the previous areas, a 95% confidence level and a 5% significance level are chosen. The z-test here is one-sided, so the alpha value for significance is 0.05 rather than 0.025. To complete this, the prop.test function is used. This takes the number of successes per group, the sample size of each group, and the type of alternative hypothesis being done (here the alternative hypothesis is "male proportion is greater than female proportion", so "greater" is chosen). The p-value is much smaller than 0.05, so the null hypothesis is rejected and it is shown that the proportions for males who received federal aid is greater than the proportion of females who received federal aid. 
+
+```{r}
+prop.test(x = c(2090, 2235), n = c(5388, 6697), alternative = "greater")
+```
+
+
+
+**Area 4**
+
+###### Respondents could answer the race variable as "White," "Black," or "Other." Note that approximately 81% of respondents identified as "White" (46,350 "White", 7,926 "Black", and 2,785 "Other), so there may be some inaccuracy due to underrepresentation of minorities in the survey. Bias will not be taken into account here as it is beyond the scope of this project and no causal conclusions are being drawn from these examples. conmedic refers to the recorded answers to the question "I am going to name some institutions in this country. As far as the people running these institutions are concerned, would you say you have a great deal of confidence, only some confidence, or hardly any confidence at all in them?" 17,931 answered "A Great Deal," 17,159 answered "Only Some," 3,222 answered "Hardly Any," and 18,749 did not provide a response.
+
+```{r}
+gss %>% count(race)
+gss %>% count(conmedic)
+```
+
+###### Consider a table of the data. It appears that the data is almost equally distributed around "A Great Deal" and "Only Some." To determine if there is a relationship between race and confidence in medical leadership, a Chi-square independence test is needed. This test is used when the data is categorical aside from counts of answer types. The conditions of this test are independence (the sample is random and each case only contributes to one cell in the table) and that each cell has at least 5 expected cases. 
+
+###### The first condition is fulfilled by the sampling methods and by the values of the contingency table--each respondent could only choose one response, so each case contributes to exactly one cell. Expected value for a Chi-square test is calculated by multiplying the row total by the column total for each cell and then dividing those results by the sample size. In total, 38,312 individuals answered conmedic. Rather than calculate everything by hand, think through this conceptually. For the expected value of each cell to be at least 5, the numerator of each calculation must be larger than x/38,312 = 5, which means that x = 191,560. Comparing the magnitude of each row and column multiplication, the smallest possible magnitude is 1 followed by 13 zeroes (the cell for "Other" and "Hardly Any" has the magnitude of multiplying three values in the hundreds by two values in the hundreds and one in the thousands). 
+
+```{r}
+chis_sq_matrix <- as.matrix(table(gss$race, gss$conmedic))
+chis_sq_matrix
+```
+
+###### It's not always possible to verify this conceptually, so make an expected value matrix. Make an empty matrix of the same dimensions and use a for loop to calculate the expected value. Again, 38,312 is the total number of answers represented in the table above.
+
+```{r}
+chis_sq_matrix <-  as.matrix(table(gss$race, gss$conmedic)) 
+expected_value <- matrix(data = NA, nrow = 3, ncol = 3)
+
+for(j in 1:3){ 
+  for(i in 1:3){ 
+    expected_value[i,j] = (sum(chis_sq_matrix[i, ]) * sum(chis_sq_matrix[, j])) / 38312
+  } 
+} 
+
+expected_value
+```
+
+###### Now that the test conditions are established, consider the Chi-square independence test. This test compares the observed and expected frequencies (numbers in cells) to determine if there is a relationship between the variables. The null hypothesis is there is no relationship between race and conmedic; the alternative hypothesis is that there is a relationship between race and conmedic. Again, a 95% confidence level and a 5% significance level is being used.There is a bit to unpack here since the results are not as explanatory as the other test results. 
+
+###### The test produced a value for the Chi-square statistic is calculated by taking the sum of all cells with the following calculation: the difference between the observed and expected values (Chi_sq_matrix - expected_value) squared divided by the expected value. Doing this for the tables above gives us 16.347. The Chi-square test uses a critical value to determine if the null hypothesis should be rejected. For this example, a two-tailed test was done, so there are two critical values (one on each side of the distribution). We use the Chi-square distribution with the significance level and the degrees of freedom (three choices per variable, and you always subtract one; multiply them together to get (3-1) * (3-1) = 4 degrees of freedom). If the Chi-square statistic is less than 0.710723 or greater than 9.487729, then the null hypothesis is rejected. Consider the p-value: if alpha = 0.05/2 = 0.025 (because it's a two-tailed test), then again it is shown that the null hypothesis is rejected since the p-value is smaller than 0.05. Based on this data, if the survey wasn't observational, there would be a relationship between race and conmedic.
+
+```{r}
+chisq.test(gss$race, gss$conmedic)
+qchisq(0.05, 4)
+qchisq(0.05, 4, lower.tail = FALSE)
+```
+
+
+###### Reminder: Although the point of statistical inference is to make conclusions about the population based on underlying samples, conclusions about the United States as a whole cannot be made since this survey is observational and not experimental. In this case, the above examples only demonstrate the theory and application of statistical inference.
